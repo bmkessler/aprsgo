@@ -9,11 +9,12 @@ type symbolWriter interface {
 }
 
 const (
-	symbolRate    uint32  = 1200   // 1200 baud
-	markFreq      float64 = 1200.0 // mark frequency in Hertz
-	spaceFreq     float64 = 2200.0 // mark frequency in Hertz
-	scalingFactor float64 = 0.75   // the scaling factor for volume
+	symbolRate uint32  = 1200   // 1200 baud
+	markFreq   float64 = 1200.0 // mark frequency in Hertz
+	spaceFreq  float64 = 2200.0 // mark frequency in Hertz
 )
+
+var scalingFactor = 0.75 // the scaling factor for volume between 0.0 and 1.0
 
 var symbolFrequency = map[symbol]float64{mark: markFreq, space: spaceFreq}
 
@@ -33,7 +34,7 @@ func newWaveWriter(samplesPerSecond uint32, bitsPerSample uint8) *waveWriter {
 	writer := new(waveWriter)
 	writer.samplesPerSecond = samplesPerSecond
 	writer.bitsPerSample = bitsPerSample
-	writer.volumeLevel = scalingFactor * float64(uint64(1)<<(bitsPerSample-1)) //
+	writer.volumeLevel = scalingFactor * float64(uint64(1)<<(bitsPerSample-1)) // the level
 	writer.samplesPerSymbol = samplesPerSecond / symbolRate
 	writer.skewSamples = samplesPerSecond % symbolRate // the remainder will need to be skewed in to prevent drift
 	phaseIncrementSymbol := make(map[symbol]float64)
@@ -46,22 +47,36 @@ func newWaveWriter(samplesPerSecond uint32, bitsPerSample uint8) *waveWriter {
 func (w *waveWriter) WriteSymbol(sym symbol) error {
 	phaseIncrement := w.phaseIncrementSymbol[sym]
 	for i := uint32(0); i < w.samplesPerSymbol; i++ {
-		w.currentPhase += phaseIncrement
-		if w.currentPhase > 2*math.Pi {
-			w.currentPhase -= 2 * math.Pi
-		}
-		newSample := w.volumeLevel * math.Cos(w.currentPhase)
-		w.data = append(w.data, byte(newSample)) // handle different bit rates properly
+		w.writeSample(phaseIncrement)
 	}
-	if w.symbolCount < w.skewSamples { // write an extra sample in for the firsr skew samples
-		w.currentPhase += phaseIncrement
-		if w.currentPhase > 2*math.Pi {
-			w.currentPhase -= 2 * math.Pi
-		}
-		newSample := w.volumeLevel * math.Cos(w.currentPhase)
-		w.data = append(w.data, byte(newSample)) // handle different bit rates properly
+	if w.symbolCount < w.skewSamples { // write an extra sample in for the first skew samples
+		w.writeSample(phaseIncrement)
 	}
 	w.symbolCount++
-	w.symbolCount %= symbolRate
+	w.symbolCount %= symbolRate // reset the symbol count after every second
 	return nil
+}
+
+func (w *waveWriter) writeSample(phaseIncrement float64) {
+	w.currentPhase += phaseIncrement
+	if w.currentPhase > 2*math.Pi { // avoid overflowing the phase
+		w.currentPhase -= 2 * math.Pi
+	}
+	newSample := w.volumeLevel * math.Sin(w.currentPhase)
+	switch { // handle different bit rates properly
+	case w.bitsPerSample == 8: // 8-bit just write the bytes
+		w.data = append(w.data, byte(newSample))
+	case w.bitsPerSample == 16: // 16-bit write LSB then MSB
+		u16Sample := uint16(newSample)
+		var h, l byte = byte((u16Sample >> 8) & 0xff), byte(u16Sample & 0xff)
+		w.data = append(w.data, l)
+		w.data = append(w.data, h)
+	case w.bitsPerSample == 32: // 32-bit write from LSB to MSB
+		u32Sample := uint32(newSample)
+		var hh, hl, lh, ll byte = byte((u32Sample >> 24) & 0xff), byte((u32Sample >> 16) & 0xff), byte((u32Sample >> 8) & 0xff), byte(u32Sample & 0xff)
+		w.data = append(w.data, ll)
+		w.data = append(w.data, lh)
+		w.data = append(w.data, hl)
+		w.data = append(w.data, hh)
+	}
 }
