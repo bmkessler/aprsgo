@@ -112,11 +112,11 @@ func (w *waveWriter) WriteFile(filename string) error {
 	if len(w.data)%2 != 0 {
 		data = append(data, byte(0)) // pad a zero byte if the length is not even
 	}
-	M := w.bitsPerSample / 8 // Bytes per sample
-	Nc := w.numChannels      // number of channels
-	Ns := len(data)          // the total number of samples, with padding
+	M := w.bitsPerSample / 8      // Bytes per sample
+	Nc := w.numChannels           // number of channels
+	dataSize := uint32(len(data)) // the total number of bytes, with padding
 	header := waveHeader{
-		riffChunkSize:         uint32(4 + 26 + 12 + (8 + uint32(M)*uint32(Nc)*uint32(Ns))),
+		riffChunkSize:         uint32(36 + dataSize),
 		formatChunkSize:       uint32(16),
 		waveFormatTag:         uint16(0x0001),
 		numberOfChannels:      uint16(Nc),
@@ -124,7 +124,7 @@ func (w *waveWriter) WriteFile(filename string) error {
 		averageBytesPerSecond: w.samplesPerSecond * uint32(M) * uint32(Nc),
 		blockAlign:            uint16(M) * uint16(Nc),
 		bitsPerSample:         uint16(w.bitsPerSample),
-		dataChunkSize:         uint32(M) * uint32(Nc) * uint32(Ns),
+		dataChunkSize:         dataSize,
 	}
 	copy(header.riffChunkID[:], riffTag)
 	copy(header.waveChunkID[:], waveTag)

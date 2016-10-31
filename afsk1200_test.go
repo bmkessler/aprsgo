@@ -88,3 +88,23 @@ func TestWriteSymbol(t *testing.T) {
 		t.Errorf("Error saving file: %v", err)
 	}
 }
+
+func TestWriteFile(t *testing.T) {
+	sampleRate, bitsPerSample, channels := uint32(48000), uint8(16), uint8(1)
+	wr, err := NewWaveWriter(sampleRate, bitsPerSample, channels)
+	if err != nil {
+		t.Errorf("Errors creating %vkHz sampling at %v-bits per second: %v", sampleRate/1000, bitsPerSample, err)
+	}
+	symbol := mark
+	for i := uint32(0); i < symbolRate; i++ { // write one second of alternating marks and spaces
+		wr.WriteSymbol(symbol)
+		symbol = !symbol
+	}
+	if len(wr.data) != int(sampleRate)*int(channels*bitsPerSample)/8 {
+		t.Errorf("%v samples, should be %v", len(wr.data), int(sampleRate)*int(bitsPerSample)/8)
+	}
+	err = wr.WriteFile(fmt.Sprintf("test_%vHz_%vbit_1200_clock_%vchan.wav", sampleRate, bitsPerSample, channels))
+	if err != nil {
+		t.Errorf("Error saving file: %v", err)
+	}
+}
