@@ -1,5 +1,8 @@
 package aprsgo
 
+// afsk1200.go contains the routines for writing out a WAV file
+// of the AFSK1200 data at various bit and sample rates
+
 import (
 	"encoding/binary"
 	"errors"

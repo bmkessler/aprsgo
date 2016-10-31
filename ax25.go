@@ -1,5 +1,7 @@
 package aprsgo
 
+// ax25.go contains routines for producing a valid ax25 data packet
+
 const (
 	flag        byte = 0x7e // the flag byte for each frame is not bit stuffed
 	controlFlag byte = 0x03 // Unnumbered Information (UI) frames

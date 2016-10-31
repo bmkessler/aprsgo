@@ -1,8 +1,7 @@
 package aprsgo
 
-// This file contains the routines for writing out a WAV file
-// of the AFSK1200 data with Non-Return to Zero Inverted (NRZI)
-// encoding of the data, bit stuffing and appropriate start and end flags
+// encoder.go handles encoding of the data, the with Non-Return to Zero Inverted (NRZI)
+// bit stuffing and appropriate start and end flags
 
 type symbol bool
 
