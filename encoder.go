@@ -17,7 +17,7 @@ var (
 	flagPadding  = 3 // number of flag bytes to send around the message
 )
 
-func writeSamples(ax25data []byte, writer symbolWriter) error {
+func WriteSamples(ax25data []byte, writer symbolWriter) error {
 	var err error
 	currentSymbol, consecutiveOnes := mark, 0
 
