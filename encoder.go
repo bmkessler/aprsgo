@@ -3,11 +3,12 @@ package aprsgo
 // encoder.go handles encoding of the data, the with Non-Return to Zero Inverted (NRZI)
 // bit stuffing and appropriate start and end flags
 
-type symbol bool
+// Symbol is a physical transmission symbol mark/space
+type Symbol bool
 
 const (
-	mark  symbol = false
-	space symbol = true
+	mark  Symbol = false
+	space Symbol = true
 	zero  byte   = 0
 	one   byte   = 1
 )
@@ -17,45 +18,34 @@ var (
 	flagPadding  = 3 // number of flag bytes to send around the message
 )
 
-func WriteSamples(ax25data []byte, writer symbolWriter) error {
-	var err error
-	currentSymbol, consecutiveOnes := mark, 0
+// EncodeAX25Data converts ax25data from an array of bytes to an array of symbols for transmission
+func EncodeAX25Data(ax25data []byte) []Symbol {
+	var symbolStream []Symbol
 
+	currentSymbol, consecutiveOnes := mark, 0
 	// send N clock bytes 0x00
 	for i := 0; i < clockPadding; i++ {
-		currentSymbol, consecutiveOnes, err = writeByte(0x00, currentSymbol, consecutiveOnes, false, writer)
-		if err != nil {
-			return err
-		}
+		symbolStream, currentSymbol, consecutiveOnes = writeByte(0x00, currentSymbol, consecutiveOnes, false, symbolStream)
 	}
 
 	// send M flagBytes
 	for i := 0; i < flagPadding; i++ {
-		currentSymbol, consecutiveOnes, err = writeByte(flag, currentSymbol, consecutiveOnes, false, writer)
-		if err != nil {
-			return err
-		}
+		symbolStream, currentSymbol, consecutiveOnes = writeByte(flag, currentSymbol, consecutiveOnes, false, symbolStream)
 	}
 
 	// send ax25data with bit-stuffing
 	for _, dataByte := range ax25data {
-		currentSymbol, consecutiveOnes, err = writeByte(dataByte, currentSymbol, consecutiveOnes, true, writer)
-		if err != nil {
-			return err
-		}
+		symbolStream, currentSymbol, consecutiveOnes = writeByte(dataByte, currentSymbol, consecutiveOnes, true, symbolStream)
 	}
 
 	// send M flag bytes
 	for i := 0; i < flagPadding; i++ {
-		currentSymbol, consecutiveOnes, err = writeByte(flag, currentSymbol, consecutiveOnes, false, writer)
-		if err != nil {
-			return err
-		}
+		symbolStream, currentSymbol, consecutiveOnes = writeByte(flag, currentSymbol, consecutiveOnes, false, symbolStream)
 	}
-	return nil
+	return symbolStream
 }
 
-func nrzi(currentSymbol symbol, bit byte) symbol {
+func nrzi(currentSymbol Symbol, bit byte) Symbol {
 	// non-return to zero inverted encoding of bit
 	// i.e. if bit is 0 switch symbols
 	if bit == 1 {
@@ -64,17 +54,16 @@ func nrzi(currentSymbol symbol, bit byte) symbol {
 	return !currentSymbol
 }
 
-func writeByte(dataByte byte, currentSymbol symbol, consecutiveOnes int, bitStuff bool, writer symbolWriter) (symbol, int, error) {
+func writeByte(dataByte byte, currentSymbol Symbol, consecutiveOnes int, bitStuff bool, symbolStream []Symbol) ([]Symbol, Symbol, int) {
 	// iterates over the bits in a byte least-significant first and writes them out
-	// returns the current symbol and count of consecutive ones and an error if encountered
+	// returns the symbolStream with any symbols appended
+	// the current symbol and count of consecutive ones
 	// implements bitstuffing every five ones if bitStuff is true
 	var bit byte
 	for j := 0; j < 8; j++ {
 		bit = dataByte & 0x01
 		currentSymbol = nrzi(currentSymbol, bit)
-		if err := writer.WriteSymbol(currentSymbol); err != nil {
-			return currentSymbol, consecutiveOnes, err
-		}
+		symbolStream = append(symbolStream, currentSymbol)
 		if bit == 0 { // update the consecutive ones count
 			consecutiveOnes = 0
 		} else {
@@ -82,12 +71,10 @@ func writeByte(dataByte byte, currentSymbol symbol, consecutiveOnes int, bitStuf
 		}
 		if bitStuff && consecutiveOnes == 5 { // transmit a zero on 5 consecutive ones if bit-stuffing
 			currentSymbol = nrzi(currentSymbol, 0)
-			if err := writer.WriteSymbol(currentSymbol); err != nil {
-				return currentSymbol, consecutiveOnes, err
-			}
+			symbolStream = append(symbolStream, currentSymbol)
 			consecutiveOnes = 0
 		}
 		dataByte = dataByte >> 1
 	}
-	return currentSymbol, consecutiveOnes, nil
+	return symbolStream, currentSymbol, consecutiveOnes
 }

@@ -10,9 +10,26 @@ const (
 	pID         byte = 0xF0 // Protocol IDentifier (PID), no Layer 3 protocol
 )
 
+// SSID for station identification or path indication
+type SSID byte
+
+// PositionReport contains the data to construct an APRS position report
+type PositionReport struct {
+	Callsign        string // limited to 6 ASCII characters
+	StationSSID     SSID
+	Destination     string // limited to 6 ASCII characters
+	DestinationSSID SSID
+	Latitude        float64
+	Longitude       float64
+	Altitude        float64
+	Course          float64
+	Speed           float64
+	Comment         string
+}
+
 // Destination SSID codes for AX.25 destination address fields
 const (
-	DestSSIDVIAPath byte = iota
+	DestSSIDVIAPath SSID = iota
 	DestSSIDWIDE1_1Path
 	DestSSIDWIDE2_2Path
 	DestSSIDWIDE3_3Path
@@ -33,42 +50,25 @@ const (
 // VersionDestinationAddress is the address designating the software version
 var VersionDestinationAddress = "APZ001"
 
-// NewBasicAPRSAX25Data calculates an ax.25 data frame in the APRS format for text lat/long
-func NewBasicAPRSAX25Data(callsign string, lat, long float64, comment string, destination string, destinationSSID byte) []byte {
-	var ax25data []byte
+// BasicAPRSAX25Data constructs a basic APRS position report
+func BasicAPRSAX25Data(report PositionReport) []byte {
 
-	// the address fields destination first
-	var destinationBytes [6]byte
-	copy(destinationBytes[:], "      ")    // intialize the field with spaces
-	copy(destinationBytes[:], destination) // TODO to check for proper bounds
-	for i := 0; i < 6; i++ {
-		destinationBytes[i] = destinationBytes[i] << 1 // AX.25 addresses are shifted left one bit
-	}
-	ax25data = append(ax25data, destinationBytes[:]...)
+	destinationAddress := constructAddress(report.Destination, report.DestinationSSID)
+	sourceAddress := constructAddress(report.Callsign, report.StationSSID)
+	informationField := CalculateBasicInformationField(report)
 
-	destinationSSID = destinationSSID << 1 // the digipeater path
-	ax25data = append(ax25data, destinationSSID)
+	ax25data := AssembleAX25Data(sourceAddress, destinationAddress, informationField)
 
-	var callsignBytes [6]byte
-	copy(callsignBytes[:], "      ")
-	copy(callsignBytes[:], callsign) // TODO to check for proper bounds
-	for i := 0; i < 6; i++ {
-		callsignBytes[i] = callsignBytes[i] << 1 // AX.25 addresses are shifted left one bit
-	}
-	ax25data = append(ax25data, callsignBytes[:]...)
+	return ax25data
+}
 
-	callsignSSID := byte(0)                // use the symbol from the information field
-	callsignSSID = (callsignSSID << 1) + 1 // final address byte has 1 in lowest bit
-	ax25data = append(ax25data, callsignSSID)
-
-	// standard flags for APRS
-	ax25data = append(ax25data, controlFlag)
-	ax25data = append(ax25data, pID)
-
+// CalculateBasicInformationField for an APRS position report
+func CalculateBasicInformationField(report PositionReport) []byte {
 	// the information field containing lat/long in text format
 	dataTypeIdentifier := "!" // realtime position with no messaging
 
 	latDir := "N" // default 0 is N
+	lat := report.Latitude
 	if lat < 0 {
 		latDir = "S"
 		lat = -lat
@@ -77,6 +77,7 @@ func NewBasicAPRSAX25Data(callsign string, lat, long float64, comment string, de
 	latMin := 60.0 * (lat - float64(latDeg))
 
 	longDir := "W" // default 0 is W
+	long := report.Longitude
 	if long > 0 {
 		longDir = "E"
 	} else {
@@ -98,9 +99,43 @@ func NewBasicAPRSAX25Data(callsign string, lat, long float64, comment string, de
 		longMin,
 		longDir,
 		displaySymbol,
-		comment)
+		report.Comment)
 
-	ax25data = append(ax25data, []byte(informationField)...)
+	return []byte(informationField)
+}
+
+func constructAddress(callsign string, ssid SSID) [7]byte {
+	var address [7]byte
+	copy(address[:], "      ") // intialize the field with spaces for shorter callsigns
+	copy(address[:], callsign) // truncate any longer callsigns
+	address[6] = byte(ssid)    // write the SSID into the 7-th byte
+	return address
+}
+
+// AssembleAX25Data converts raw address, destination and information fields into an unnumbered information AX25 UI packet
+func AssembleAX25Data(sourceAddress [7]byte, destinationAddress [7]byte, informationField []byte) []byte {
+	var ax25data []byte
+
+	// append the addresses, destination first
+	for i := 0; i < 7; i++ {
+		destinationAddress[i] = destinationAddress[i] << 1 // AX.25 addresses are shifted left one bit
+	}
+	ax25data = append(ax25data, destinationAddress[:]...)
+	for i := 0; i < 7; i++ {
+		sourceAddress[i] = sourceAddress[i] << 1 // AX.25 addresses are shifted left one bit
+	}
+
+	// note that AX25 data allows additional address fields here as well, not currently supported
+
+	sourceAddress[6]++ // the final address bit is set to one
+	ax25data = append(ax25data, sourceAddress[:]...)
+
+	// standard flags for APRS
+	ax25data = append(ax25data, controlFlag)
+	ax25data = append(ax25data, pID)
+
+	// the information fields
+	ax25data = append(ax25data, informationField...)
 
 	ax25data = appendFCS(ax25data) // append the 16-bit CRC Frame Check Sequence
 	return ax25data

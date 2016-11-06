@@ -10,8 +10,16 @@ import (
 	"os"
 )
 
+// WAVParams are parameters for writing a WAV file
+type WAVParams struct {
+	Filename         string
+	SamplesPerSecond uint32
+	BitsPerSample    uint8
+	NumChannels      uint8
+}
+
 type symbolWriter interface {
-	WriteSymbol(symbol) error
+	WriteSymbol(Symbol) error
 }
 
 const (
@@ -29,7 +37,34 @@ var (
 
 var scalingFactor = 0.75 // the scaling factor for volume between 0.0 and 1.0
 
-var symbolFrequency = map[symbol]float64{mark: markFreq, space: spaceFreq}
+// SetVolume sets the scaling factor for volume between 0.0 and 1.0
+func SetVolume(newVolume float64) {
+	if newVolume > 1.0 { // clipped to range
+		newVolume = 1.0
+	}
+	if newVolume < 0.0 {
+		newVolume = 0.0
+	}
+	scalingFactor = newVolume
+}
+
+// WriteWAV writes a symbol stream out to a WAV file with parameters given by params
+func WriteWAV(symbolStream []Symbol, params WAVParams) error {
+	wr, err := newWaveWriter(params.SamplesPerSecond, params.BitsPerSample, params.NumChannels)
+	if err != nil {
+		return err
+	}
+	for _, sym := range symbolStream { // encode the symbols
+		wr.writeSymbol(sym)
+	}
+	if err = wr.writeFile(params.Filename); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+var symbolFrequency = map[Symbol]float64{mark: markFreq, space: spaceFreq}
 
 type waveWriter struct {
 	samplesPerSecond     uint32             // ideally a multiple of 1200, e.g. 48000 DVD sound
@@ -40,7 +75,7 @@ type waveWriter struct {
 	samplesPerSymbol     uint32             // how many samples are written for each symbol
 	skewSamples          uint32             // the skew samples needed to prevent symbol rate drift
 	currentPhase         float64            // the current phase of the wave to maintain continuity
-	phaseIncrementSymbol map[symbol]float64 // map of the phase increment per sample for each symbol
+	phaseIncrementSymbol map[Symbol]float64 // map of the phase increment per sample for each symbol
 	data                 []byte             // the output data as an array of bytes
 }
 
@@ -60,7 +95,7 @@ type waveHeader struct {
 	dataChunkSize         uint32  // M*Nc*Ns
 }
 
-func NewWaveWriter(samplesPerSecond uint32, bitsPerSample uint8, numChannels uint8) (*waveWriter, error) {
+func newWaveWriter(samplesPerSecond uint32, bitsPerSample uint8, numChannels uint8) (*waveWriter, error) {
 	if bitsPerSample%8 != 0 || bitsPerSample > 32 {
 		return nil, errors.New("only 8, 16, 24 and 32 bitsPerSample are supported")
 	}
@@ -71,14 +106,14 @@ func NewWaveWriter(samplesPerSecond uint32, bitsPerSample uint8, numChannels uin
 	writer.volumeLevel = scalingFactor * float64(uint64(1)<<(bitsPerSample-1)) // the level
 	writer.samplesPerSymbol = samplesPerSecond / symbolRate
 	writer.skewSamples = samplesPerSecond % symbolRate // the remainder will need to be skewed in to prevent drift
-	phaseIncrementSymbol := make(map[symbol]float64)
+	phaseIncrementSymbol := make(map[Symbol]float64)
 	phaseIncrementSymbol[mark] = 2 * math.Pi * markFreq / float64(samplesPerSecond)
 	phaseIncrementSymbol[space] = 2 * math.Pi * spaceFreq / float64(samplesPerSecond)
 	writer.phaseIncrementSymbol = phaseIncrementSymbol
 	return writer, nil
 }
 
-func (w *waveWriter) WriteSymbol(sym symbol) error {
+func (w *waveWriter) writeSymbol(sym Symbol) {
 	phaseIncrement := w.phaseIncrementSymbol[sym]
 	for i := uint32(0); i < w.samplesPerSymbol; i++ {
 		w.writeSample(phaseIncrement)
@@ -88,7 +123,6 @@ func (w *waveWriter) WriteSymbol(sym symbol) error {
 	}
 	w.symbolCount++
 	w.symbolCount %= symbolRate // reset the symbol count after every second
-	return nil
 }
 
 func (w *waveWriter) writeSample(phaseIncrement float64) {
@@ -110,7 +144,7 @@ func (w *waveWriter) writeSample(phaseIncrement float64) {
 	}
 }
 
-func (w *waveWriter) WriteFile(filename string) error {
+func (w *waveWriter) writeFile(filename string) error {
 	data := w.data
 	if len(w.data)%2 != 0 {
 		data = append(data, byte(0)) // pad a zero byte if the length is not even
