@@ -6,6 +6,9 @@ package aprsgo
 // Symbol is a physical transmission symbol mark/space
 type Symbol bool
 
+// SymbolStream is a series of Symobls for Tx/Rx
+type SymbolStream []Symbol
+
 const (
 	mark  Symbol = false
 	space Symbol = true
@@ -18,9 +21,9 @@ var (
 	flagPadding  = 3 // number of flag bytes to send around the message
 )
 
-// EncodeAX25Data converts ax25data from an array of bytes to an array of symbols for transmission
-func EncodeAX25Data(ax25data []byte) []Symbol {
-	var symbolStream []Symbol
+// Encode converts ax25data from an array of bytes to an array of symbols for transmission
+func (ax25data AX25Data) Encode() SymbolStream {
+	var symbolStream SymbolStream
 
 	currentSymbol, consecutiveOnes := mark, 0
 	// send N clock bytes 0x00
@@ -54,7 +57,7 @@ func nrzi(currentSymbol Symbol, bit byte) Symbol {
 	return !currentSymbol
 }
 
-func writeByte(dataByte byte, currentSymbol Symbol, consecutiveOnes int, bitStuff bool, symbolStream []Symbol) ([]Symbol, Symbol, int) {
+func writeByte(dataByte byte, currentSymbol Symbol, consecutiveOnes int, bitStuff bool, symbolStream SymbolStream) (SymbolStream, Symbol, int) {
 	// iterates over the bits in a byte least-significant first and writes them out
 	// returns the symbolStream with any symbols appended
 	// the current symbol and count of consecutive ones

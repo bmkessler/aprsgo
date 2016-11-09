@@ -5,7 +5,7 @@ import (
 )
 
 func TestNewBasicAPRSAX25Data(t *testing.T) {
-	report := PositionReport{
+	report := PositionData{
 		Callsign:        "W1AW",
 		Destination:     VersionDestinationAddress,
 		DestinationSSID: SSID(1),
@@ -14,7 +14,7 @@ func TestNewBasicAPRSAX25Data(t *testing.T) {
 		Comment:         "Test",
 	}
 
-	ax25data := BasicAPRSAX25Data(report)
+	ax25data := report.BasicAPRSReport()
 	// decode the address fields
 	for i := 0; i < 14; i++ {
 		ax25data[i] = ax25data[i] >> 1

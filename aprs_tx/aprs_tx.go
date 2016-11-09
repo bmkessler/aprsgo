@@ -22,7 +22,7 @@ func main() {
 
 	flag.Parse()
 
-	report := aprsgo.PositionReport{
+	report := aprsgo.PositionData{
 		Callsign:        *callsign,
 		Destination:     aprsgo.VersionDestinationAddress,
 		DestinationSSID: aprsgo.SSID(*digipath),
@@ -31,9 +31,9 @@ func main() {
 		Comment:         *comment,
 	}
 
-	ax25data := aprsgo.BasicAPRSAX25Data(report)
+	ax25data := report.BasicAPRSReport()
 
-	symbolStream := aprsgo.EncodeAX25Data(ax25data)
+	symbolStream := ax25data.Encode()
 
 	params := aprsgo.WAVParams{
 		Filename:         *filename,
@@ -42,7 +42,7 @@ func main() {
 		NumChannels:      uint8(*numChannels),
 	}
 
-	if err := aprsgo.WriteWAV(symbolStream, params); err != nil {
+	if err := symbolStream.WriteWAV(params); err != nil {
 		log.Fatal(err)
 	}
 }

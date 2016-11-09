@@ -49,7 +49,7 @@ func SetVolume(newVolume float64) {
 }
 
 // WriteWAV writes a symbol stream out to a WAV file with parameters given by params
-func WriteWAV(symbolStream []Symbol, params WAVParams) error {
+func (symbolStream SymbolStream) WriteWAV(params WAVParams) error {
 	wr, err := newWaveWriter(params.SamplesPerSecond, params.BitsPerSample, params.NumChannels)
 	if err != nil {
 		return err

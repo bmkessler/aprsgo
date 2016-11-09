@@ -10,11 +10,14 @@ const (
 	pID         byte = 0xF0 // Protocol IDentifier (PID), no Layer 3 protocol
 )
 
+// AX25Data holds the data in an AX25 frame without flags
+type AX25Data []byte
+
 // SSID for station identification or path indication
 type SSID byte
 
-// PositionReport contains the data to construct an APRS position report
-type PositionReport struct {
+// PositionData contains the data to construct an APRS position report
+type PositionData struct {
 	Callsign        string // limited to 6 ASCII characters
 	StationSSID     SSID
 	Destination     string // limited to 6 ASCII characters
@@ -50,20 +53,20 @@ const (
 // VersionDestinationAddress is the address designating the software version
 var VersionDestinationAddress = "APZ001"
 
-// BasicAPRSAX25Data constructs a basic APRS position report
-func BasicAPRSAX25Data(report PositionReport) []byte {
+// BasicAPRSReport constructs a basic APRS position report
+func (data PositionData) BasicAPRSReport() AX25Data {
 
-	destinationAddress := constructAddress(report.Destination, report.DestinationSSID)
-	sourceAddress := constructAddress(report.Callsign, report.StationSSID)
-	informationField := CalculateBasicInformationField(report)
+	destinationAddress := constructAddress(data.Destination, data.DestinationSSID)
+	sourceAddress := constructAddress(data.Callsign, data.StationSSID)
+	informationField := CalculateBasicInformationField(data)
 
 	ax25data := AssembleAX25Data(sourceAddress, destinationAddress, informationField)
 
-	return ax25data
+	return AX25Data(ax25data)
 }
 
 // CalculateBasicInformationField for an APRS position report
-func CalculateBasicInformationField(report PositionReport) []byte {
+func CalculateBasicInformationField(report PositionData) []byte {
 	// the information field containing lat/long in text format
 	dataTypeIdentifier := "!" // realtime position with no messaging
 
