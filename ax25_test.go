@@ -6,12 +6,10 @@ import (
 
 func TestNewBasicAPRSAX25Data(t *testing.T) {
 	report := PositionData{
-		Callsign:        "W1AW",
-		Destination:     VersionDestinationAddress,
-		DestinationSSID: SSID(1),
-		Latitude:        41.7147,
-		Longitude:       -72.7272,
-		Comment:         "Test",
+		Callsign:  "W1AW",
+		Latitude:  41.7147,
+		Longitude: -72.7272,
+		Comment:   "Test",
 	}
 
 	ax25data := report.BasicAPRSReport()

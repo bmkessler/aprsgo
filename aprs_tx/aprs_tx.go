@@ -13,7 +13,6 @@ func main() {
 	comment := flag.String("comment", "Test", "Comment to append to position report")
 	lat := flag.Float64("lat", 41.7147, "Latitude for position report")
 	long := flag.Float64("long", -72.7272, "Longitude for position report")
-	digipath := flag.Uint("digi", 0, "The SSID to indicate the digipeater path")
 	// WAV file parameters
 	filename := flag.String("file", "test_file.wav", "The output filename")
 	sampleRate := flag.Uint("sr", 48000, "Sample rate in samples per second")
@@ -23,12 +22,10 @@ func main() {
 	flag.Parse()
 
 	report := aprsgo.PositionData{
-		Callsign:        *callsign,
-		Destination:     aprsgo.VersionDestinationAddress,
-		DestinationSSID: aprsgo.SSID(*digipath),
-		Latitude:        *lat,
-		Longitude:       *long,
-		Comment:         *comment,
+		Callsign:  *callsign,
+		Latitude:  *lat,
+		Longitude: *long,
+		Comment:   *comment,
 	}
 
 	ax25data := report.BasicAPRSReport()
@@ -47,7 +44,7 @@ func main() {
 	}
 }
 
-// To test the output file with multimon the WAV file can be piped with sox to the expected format
+// To test the output file with multimon-ng the WAV file can be piped with sox to the expected format
 // sox -t wav test_file.wav -esigned-integer -b16 -r 22050 -t raw - | multimon-ng -a AFSK1200 -A -t raw -
 //
 // expected output should be:
