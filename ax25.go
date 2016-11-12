@@ -56,20 +56,96 @@ func (data PositionData) BasicAPRSReport() AX25Data {
 
 	destinationAddress := constructAddress(Version, DestSSIDVIAPath)
 	sourceAddress := constructAddress(data.Callsign, data.StationSSID)
-	informationField := CalculateBasicInformationField(data)
+	informationField := data.CalculateBasicInformationField()
 
 	ax25data := AssembleAX25Data(sourceAddress, destinationAddress, informationField)
 
 	return AX25Data(ax25data)
 }
 
+// CompressedAPRSReport constructs a basic APRS position report
+func (data PositionData) CompressedAPRSReport() AX25Data {
+
+	destinationAddress := constructAddress(Version, DestSSIDVIAPath)
+	sourceAddress := constructAddress(data.Callsign, data.StationSSID)
+	informationField := data.CalculateCompressedInformationField()
+
+	ax25data := AssembleAX25Data(sourceAddress, destinationAddress, informationField)
+
+	return AX25Data(ax25data)
+}
+
+// Base91Encode encodes the given number to the given number of digits
+func Base91Encode(number uint32, digits int) (string, error) {
+	var base uint32 = 1
+	var output []byte
+	for i := 0; i < digits-1; i++ {
+		base *= 91
+	}
+	if number/base >= 91 {
+		return "", fmt.Errorf("%d is greater than %d base-91 digits", number, digits)
+	}
+	for i := 0; i < digits-1; i++ {
+		digit := number / base
+		output = append(output, byte(digit+33))
+		number %= base
+		base /= 91
+	}
+	output = append(output, byte(number+33))
+	return string(output), nil
+}
+
+// CalculateCompressedInformationField returns the position in compressed format without any additional information
+func (data PositionData) CalculateCompressedInformationField() []byte {
+	/*
+		In all cases the compressed format is a fixed 13-character field:
+		/YYYYXXXX$csT
+		where
+		/
+		is the Symbol Table Identifier
+		YYYY
+		is the compressed latitude base-91 encoded
+		XXXX
+		is the compressed longitude base-91 encoded
+		$
+		is the Symbol Code
+		cs
+		is the compressed course/speed or
+		compressed pre-calculated radio range or
+		compressed altitude
+		T
+		is the compression type indicator
+	*/
+	dataTypeIdentifier := "!"           // realtime position with no messaging
+	displaySymbolTableIdentifier := "/" // primary table
+	displaySymbol := "-"                // house
+
+	latString, _ := Base91Encode(uint32(380926*(90-data.Latitude)), 4) // TODO: properly handle out of bounds lat/long err
+	longString, _ := Base91Encode(uint32(190463*(180+data.Longitude)), 4)
+
+	courseSpeed := " s"    // " " indicates no information in this field "s" is just filler
+	compressionType := "T" // filler due to " " above
+
+	informationField := fmt.Sprintf("%s%s%s%s%s%s%s%s",
+		dataTypeIdentifier,
+		displaySymbolTableIdentifier,
+		latString,
+		longString,
+		displaySymbol,
+		courseSpeed,
+		compressionType,
+		data.Comment)
+
+	return []byte(informationField)
+}
+
 // CalculateBasicInformationField for an APRS position report
-func CalculateBasicInformationField(report PositionData) []byte {
+func (data PositionData) CalculateBasicInformationField() []byte {
 	// the information field containing lat/long in text format
 	dataTypeIdentifier := "!" // realtime position with no messaging
 
 	latDir := "N" // default 0 is N
-	lat := report.Latitude
+	lat := data.Latitude
 	if lat < 0 {
 		latDir = "S"
 		lat = -lat
@@ -78,7 +154,7 @@ func CalculateBasicInformationField(report PositionData) []byte {
 	latMin := 60.0 * (lat - float64(latDeg))
 
 	longDir := "W" // default 0 is W
-	long := report.Longitude
+	long := data.Longitude
 	if long > 0 {
 		longDir = "E"
 	} else {
@@ -100,7 +176,7 @@ func CalculateBasicInformationField(report PositionData) []byte {
 		longMin,
 		longDir,
 		displaySymbol,
-		report.Comment)
+		data.Comment)
 
 	return []byte(informationField)
 }
